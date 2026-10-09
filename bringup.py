@@ -41,6 +41,24 @@ def check_video(cfg):
         print(f"  视频异常：{e}")
 
 
+def check_model(cfg):
+    print("== 检测后端 ==")
+    backend = os.environ.get("SMART_GIMBAL_DETECTOR", cfg["model"]["backend"])
+    print(f"  生效后端：{backend}")
+    if backend == "ros_track":
+        try:
+            import rclpy  # noqa
+            print("  rclpy OK")
+        except ImportError:
+            print("  rclpy 缺失：先 source /opt/ros/humble/setup.bash")
+        try:
+            import anti_drone_interfaces.msg  # noqa
+            print("  anti_drone_interfaces OK")
+        except ImportError:
+            print("  anti_drone_interfaces 缺失：先 colcon build 装好")
+        print(f"  话题：{cfg['model'].get('ros_topic')}  ROS_DOMAIN_ID={os.environ.get('ROS_DOMAIN_ID', '(未设，默认0)')}")
+
+
 def check_serial(cfg):
     print("== 串口 ==")
     ports = sorted(glob.glob("/dev/ttyUSB*") + glob.glob("/dev/ttyACM*"))
@@ -85,6 +103,7 @@ def main():
     check_deps()
     cfg = check_config()
     check_video(cfg)
+    check_model(cfg)
     check_serial(cfg)
     check_gimbal_readonly(cfg)
     print("\n自检完成。mock 全绿即可跑主程序：python3 main.py")

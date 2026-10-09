@@ -2,9 +2,7 @@
 在 gimbal_tracker/ibvs.py 基础上加变化率限制（slew），防检测框抖动变成电机猛动。
 非 TRACK 状态调用方只传 visible=False，本模块自然输出零。
 """
-from state_machine import TRACK  # noqa: F401  状态名统一
-
-IDLE, TRACK, LOST = "IDLE", "TRACK", "LOST"
+from state_machine import TRACK  # 状态名统一：IDLE/TRACK/LOST/ERROR/STOPPED
 
 
 class IBVSConfig:

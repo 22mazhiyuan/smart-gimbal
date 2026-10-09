@@ -53,10 +53,10 @@ def draw_overlay(img, det, state, fps, rng, mode):
                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
     h, w = img.shape[:2]
     cv2.drawMarker(img, (w // 2, h // 2), (0, 0, 255), cv2.MARKER_CROSS, 24, 2)
-    dist_txt = f"{rng.distance_m:.1f}m" if rng.valid else "距离无效"
+    dist_txt = f"{rng.distance_m:.1f}m" if rng.valid else "N/A"
     lines = [f"[{state}] {mode}  FPS {fps:.1f}",
              f"du {det.du_px:+.0f} dv {det.dv_px:+.0f}  conf {det.conf:.2f}",
-             f"距离 {dist_txt}"]
+             f"dist {dist_txt}"]
     for i, t in enumerate(lines):
         cv2.putText(img, t, (10, 30 + i * 28),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)

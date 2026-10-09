@@ -25,7 +25,8 @@ class RTSPSource:
     def open(self):
         if not HAS_CV2:
             raise RuntimeError("没装 opencv，Jetson 上 pip install opencv-python")
-        # ！！/dev/video0 被 jiami.py 占用，只能走 RTSP 只读流，别碰摄像头设备
+        # smart_gimbal 只走 RTSP 只读流，不直接碰摄像头设备
+        # （/dev/video0 由 Codex 的独立运行器占用发流，避免抢设备）
         self._connect()
 
     def _connect(self):

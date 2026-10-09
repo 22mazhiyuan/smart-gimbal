@@ -11,6 +11,7 @@ sys.path.insert(0, ".")
 
 from config_center import load_config
 from state_machine import StateMachine, TRACK, STOPPED
+from detection.interface import MockDetector
 from ibvs import IBVSTracker, IBVSConfig
 from video import source as video_source
 from video import mjpeg_server
@@ -44,7 +45,8 @@ def main():
             logger.event("警告：RTSP 首帧未到，主循环将归零并持续重连")
     det = create_detector(cfg, img_w, img_h)  # 3. 模型加载：mock | ros_track
     det.open()
-    logger.event(f"检测器 backend={cfg['model']['backend']}")
+    backend = os.environ.get("SMART_GIMBAL_DETECTOR", cfg["model"]["backend"])
+    logger.event(f"检测器 backend={backend}")
 
     g = cfg["gimbal"]
     port = g["port"]
@@ -98,6 +100,7 @@ def main():
 
     print(f"[主循环] {rate}Hz 启动，Ctrl+C 退出")
     logger.event("主循环启动")
+    stream_down = False
 
     def shutdown(reason):
         sm.stop(reason)
@@ -114,11 +117,18 @@ def main():
             t0 = time.monotonic()
             frame = src.read()
             if frame is None:
-                # 断流：控制归零，程序不崩，持续重连（文档 §7）
+                # 断流：状态机同步进 LOST 计时，控制归零，程序不崩，持续重连（文档 §7）
+                if not stream_down:
+                    stream_down = True
+                    sm.update(False, 0.0, dt=dt)
+                    logger.event("视频断流：控制归零，持续重连")
                 if real:
                     drv.stop(g["pitch_id"])
                 time.sleep(0.2)
                 continue
+            if stream_down:
+                stream_down = False
+                logger.event("视频恢复")
             logger.lat.mark(frame.frame_id, "got")
 
             d = det.process(frame)            # 同一 frame_id 全链路
