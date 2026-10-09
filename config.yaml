@@ -12,8 +12,9 @@ video:
   mjpeg_port: 8080
 
 model:
-  backend: "mock"             # mock | ros_track（ros_track 订阅下方话题，需anti_drone_interfaces）
+  backend: "mock"             # mock | ros_track（也可用环境变量 SMART_GIMBAL_DETECTOR 覆盖）
   ros_topic: "/counter_uav/tracking/primary_target"
+  ros_domain_id: 99           # 跟检测节点一致，否则收不到话题
   conf_thresh: 0.4
   input_size: 640
   recheck_period: 15
