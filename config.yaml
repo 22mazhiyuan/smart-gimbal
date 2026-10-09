@@ -56,6 +56,18 @@ rangefinder:
   port: "auto"
   baud: 115200
   timeout_s: 1.0
+
+autofocus:
+  enabled: false              # 测距辅助对焦总开关（手机激光对焦原理）
+  f_mm: 16.0                  # 镜头焦距（VCM 调的是对焦距离，焦距不变）
+  driver: "mock"              # mock | uvc（USB 自动对焦模组）| i2c（Jetson 直驱 VCM 芯片）
+  dac_infinity: 512           # 标定：无穷远（100m 外最清晰）时的 DAC
+  um_per_dac: 0.2             # 标定：每 DAC 步进的镜片位移 µm（行程/DAC位数，或两点标定）
+  deadband_dac: 3             # 死区：DAC 变化小于此值不动，防抖动
+  max_rate_hz: 2              # 最高调焦频率，防 hunting
+  video_dev: "/dev/video0"    # uvc 驱动用（V4L2 设 control 不抢推流器的流）
+  i2c_bus: 1
+  i2c_addr: 0x0C
   valid_range_m: [0.5, 100.0]
 
 state_machine:

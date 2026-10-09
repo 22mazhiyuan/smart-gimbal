@@ -32,6 +32,10 @@ python3 main.py       # 一条命令启动全部
 | `runlog/run_logger.py` | §3/§7 运行日志：独立目录+配置快照+延迟统计（中位数/P95/最大） |
 | `bringup.py` | §5 联调自检 |
 | `tools/focus_assist.py` | 对焦辅助：实时清晰度分数，手动转镜头调到峰值锁死 |
+| `tools/autofocus.py` | 自动对焦框架：清晰度评价+爬山搜索+电机抽象 |
+| `drivers/focus.py` | VCM 音圈调焦驱动：mock/uvc/i2c |
+| `focus/af_chain.py` | 测距辅助对焦链路：距离->薄透镜位移->DAC->电机（含死区/限频） |
+| `tools/ranging_af_test.py` | 链路演示：模拟距离序列跑通全链路 |
 
 ## 已对接 / 待对接
 
