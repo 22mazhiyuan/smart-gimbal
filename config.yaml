@@ -1,0 +1,68 @@
+# 机载智能跟踪云台 —— 统一配置（文档 §8）
+schema_version: "1.0"
+
+video:
+  source: "rtsp"              # rtsp | mock（3mm 相机到货前用 rtsp 旧流或 mock）
+  rtsp_url: "rtsp://127.0.0.1:8554/yolo_hw"
+  width: 0                    # 0=按实际帧宽高，不写死 1280x720
+  height: 0
+  format: "MJPEG"
+  fps: 30
+  reconnect_interval_s: 2.0
+  mjpeg_port: 8080
+
+model:
+  backend: "mock"             # mock | ros_track（ros_track 订阅下方话题，需anti_drone_interfaces）
+  ros_topic: "/counter_uav/tracking/primary_target"
+  conf_thresh: 0.4
+  input_size: 640
+  recheck_period: 15
+
+target_select:
+  priority: "largest_conf"    # 固定规则选目标并保持 ID
+  kalman_process_noise: 1.0
+  kalman_measure_noise: 4.0
+  predict_horizon_s: 0.5      # 预测只用于重捕获，不作为有效观测
+  recapture_iou_thresh: 0.3
+
+ibvs:
+  kp: 0.05
+  deadzone_px: 10.0
+  max_vel_dps: 30.0
+  slew_dps2: 120.0            # 变化率限制：每秒速度最大变化量，防电机猛动
+  dir_sign_pitch: 1           # 首次点动实测后填
+  dir_sign_yaw: 1
+  lost_timeout_s: 1.0
+  enable_yaw: false           # 本云台无偏航轴；du 交给机体偏航（预留接口）
+
+gimbal:
+  mode: "mock"                # mock | real（real 需 GIMBAL_REAL_MOTION=1）
+  port: "auto"                # auto=按 VID:PID+序列号自动识别；或写 /dev/ts6004_rs485
+  vid_pid: "10c4:ea60"        # Silicon Labs CP210x（旧云台也是这个，注意区分）
+  serial: ""                 # 新 RS485 转接器的序列号待 Codex 重扫；已确认 9cf94d… 是旧云台，勿填
+  baud: 115200
+  pitch_id: 2
+  roll_id: 1
+  rate_hz: 15.0
+  motion_max_speed_dps: 60.0
+  motion_accel: 3000
+  motion_decel: 3000
+  pulses_per_deg: 100         # 待验证输出轴/电机侧
+  soft_limit_deg: []          # 实测后填，如 [-45.0, 45.0]；空着 real 模式拒绝启动
+
+rangefinder:
+  backend: "mock"             # mock | sdbm100（到货后 Codex 对接协议）
+  port: "auto"
+  baud: 115200
+  timeout_s: 1.0
+  valid_range_m: [0.5, 100.0]
+
+state_machine:
+  track_min_conf: 0.4
+  track_min_hits: 2           # 连续 N 帧有效观测才进 TRACK
+  lost_confirm_s: 1.0
+
+logging:
+  dir: "runs"
+  level: "INFO"
+  stat_window_s: 10.0
