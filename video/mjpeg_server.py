@@ -44,7 +44,7 @@ class _Handler(BaseHTTPRequestHandler):
     def log_message(self, *a): pass
 
 
-def draw_overlay(img, det, state, fps, rng, mode):
+def draw_overlay(img, det, state, fps, rng, mode, focus_dac=None):
     """在原图上叠加信息；网页缩放不改变控制坐标（控制只用原图 du/dv）。"""
     x1, y1, x2, y2 = [int(v) for v in det.bbox_xyxy]
     if det.visible and not det.predicted:
@@ -56,7 +56,8 @@ def draw_overlay(img, det, state, fps, rng, mode):
     dist_txt = f"{rng.distance_m:.1f}m" if rng.valid else "N/A"
     lines = [f"[{state}] {mode}  FPS {fps:.1f}",
              f"du {det.du_px:+.0f} dv {det.dv_px:+.0f}  conf {det.conf:.2f}",
-             f"dist {dist_txt}"]
+             f"dist {dist_txt}",
+             f"focus {focus_dac}" if focus_dac is not None else "focus -"]
     for i, t in enumerate(lines):
         cv2.putText(img, t, (10, 30 + i * 28),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)

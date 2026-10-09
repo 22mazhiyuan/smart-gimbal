@@ -89,6 +89,18 @@ def main():
     rng = rng_mod.create(cfg)
     rng.open()
 
+    from drivers import focus as focus_mod
+    from focus.af_chain import RangingAF
+    af, focus_drv = None, None
+    if cfg.get("autofocus", {}).get("enabled"):
+        focus_drv = focus_mod.create(cfg)
+        focus_drv.open()
+        af = RangingAF(cfg, focus_drv)
+        logger.event(f"自动对焦开：driver={cfg['autofocus']['driver']} "
+                     f"f={cfg['autofocus']['f_mm']}mm")
+    else:
+        logger.event("自动对焦关（autofocus.enabled=false），硬件到了再开")
+
     sm = StateMachine(cfg)
     tracker = IBVSTracker(IBVSConfig(cfg))
     srv, mjpeg_port = mjpeg_server.serve(cfg["video"]["mjpeg_port"])
@@ -109,6 +121,8 @@ def main():
                 drv.stop_all()
         finally:
             det.close(); rng.close(); src.close(); drv.close()
+            if focus_drv is not None:
+                focus_drv.close()
         logger.finish({"mode": mode, "frames": frames,
                        "state_history": sm.history, "result": reason})
 
@@ -159,14 +173,21 @@ def main():
                     drv.emergency_stop(g["pitch_id"])
 
             r = rng.read()
+            # 测距辅助对焦：只跟有效目标的距离；无有效目标/测距无效时保持上次位置
+            focus_dac, focus_moved = None, False
+            if af is not None:
+                fd_valid = d.visible and not d.predicted and r.valid
+                focus_dac, focus_moved = af.update(r.distance_m if fd_valid else None,
+                                                   fd_valid)
             if cv2 is not None:
-                img = mjpeg_server.draw_overlay(frame.image.copy(), d, state, fps, r, mode)
+                img = mjpeg_server.draw_overlay(frame.image.copy(), d, state, fps, r,
+                                                mode, focus_dac)
                 ok, jpg = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 80])
                 if ok:
                     mjpeg_server.push_frame(jpg.tobytes())
             logger.lat.mark(frame.frame_id, "show")
 
-            logger.frame(frame.frame_id, d, state, pv, r, mode)
+            logger.frame(frame.frame_id, d, state, pv, r, mode, focus_dac, focus_moved)
             frames += 1
             last_fps_n += 1
             if time.monotonic() - last_fps_t >= 2.0:

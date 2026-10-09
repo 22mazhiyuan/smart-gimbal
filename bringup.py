@@ -59,6 +59,22 @@ def check_model(cfg):
         print(f"  话题：{cfg['model'].get('ros_topic')}  ROS_DOMAIN_ID={os.environ.get('ROS_DOMAIN_ID', '(未设，默认0)')}")
 
 
+def check_autofocus(cfg):
+    print("== 自动对焦 ==")
+    c = cfg.get("autofocus", {})
+    if not c.get("enabled"):
+        print("  未启用（autofocus.enabled=false），硬件到了再开")
+        return
+    print(f"  driver={c.get('driver')} f={c.get('f_mm')}mm "
+          f"dac_inf={c.get('dac_infinity')} um/dac={c.get('um_per_dac')}")
+    try:
+        from drivers import focus as focus_mod
+        drv = focus_mod.create(cfg)
+        print(f"  驱动创建 OK：{type(drv).__name__}（mock 只记录不发送）")
+    except Exception as e:
+        print(f"  驱动创建失败：{e}")
+
+
 def check_serial(cfg):
     print("== 串口 ==")
     ports = sorted(glob.glob("/dev/ttyUSB*") + glob.glob("/dev/ttyACM*"))
@@ -104,6 +120,7 @@ def main():
     cfg = check_config()
     check_video(cfg)
     check_model(cfg)
+    check_autofocus(cfg)
     check_serial(cfg)
     check_gimbal_readonly(cfg)
     print("\n自检完成。mock 全绿即可跑主程序：python3 main.py")

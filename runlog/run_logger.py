@@ -42,7 +42,7 @@ class RunLogger:
         self.lat = LatencyTracker()
         print(f"[日志] 本次运行目录：{self.dir}")
 
-    def frame(self, fid, det, state, pv, rng, mode):
+    def frame(self, fid, det, state, pv, rng, mode, focus_dac=None, focus_moved=False):
         self._log.write(json.dumps({
             "frame_id": fid, "ts": round(time.time(), 3),
             "visible": det.visible, "bbox": det.bbox_xyxy,
@@ -50,6 +50,7 @@ class RunLogger:
             "state": state, "pitch_vel": round(pv, 2),
             "dist_m": rng.distance_m if rng.valid else None,
             "dist_valid": rng.valid, "mode": mode,
+            "focus_dac": focus_dac, "focus_moved": focus_moved,
         }, ensure_ascii=False) + "\n")
 
     def event(self, text):
