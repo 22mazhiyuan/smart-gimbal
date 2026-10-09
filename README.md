@@ -29,7 +29,7 @@ python3 main.py       # 一条命令启动全部
 | `video/source.py` | §3 视频源：RTSP（只读流，不碰 /dev/video0）/mock；断流归零重连 |
 | `video/mjpeg_server.py` | §3/§7 HTTP MJPEG：框/类别/du/dv/状态/FPS/距离/mock-real |
 | `detection/interface.py` | §2 检测接口：`DetectionResult(frame_id, bbox, du_px, dv_px, visible)` |
-| `logging/run_logger.py` | §3/§7 运行日志：独立目录+配置快照+延迟统计（中位数/P95/最大） |
+| `runlog/run_logger.py` | §3/§7 运行日志：独立目录+配置快照+延迟统计（中位数/P95/最大） |
 | `bringup.py` | §5 联调自检 |
 
 ## 已对接 / 待对接

@@ -17,7 +17,7 @@ from video import source as video_source
 from video import mjpeg_server
 from drivers import rangefinder as rng_mod
 from drivers.ts6004_driver import TS6004, resolve_port
-from logging.run_logger import RunLogger
+from runlog.run_logger import RunLogger
 
 try:
     import cv2
