@@ -31,6 +31,7 @@ python3 main.py       # 一条命令启动全部
 | `detection/interface.py` | §2 检测接口：`DetectionResult(frame_id, bbox, du_px, dv_px, visible)` |
 | `runlog/run_logger.py` | §3/§7 运行日志：独立目录+配置快照+延迟统计（中位数/P95/最大） |
 | `bringup.py` | §5 联调自检 |
+| `tools/focus_assist.py` | 对焦辅助：实时清晰度分数，手动转镜头调到峰值锁死 |
 
 ## 已对接 / 待对接
 
