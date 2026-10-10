@@ -1,6 +1,6 @@
 [Unit]
 Description=机载智能跟踪云台 smart_gimbal
-After=network.target
+After=network.target rtsp_stream.service ros_track.service
 Wants=network.target
 
 [Service]
