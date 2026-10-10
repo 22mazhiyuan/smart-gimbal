@@ -134,7 +134,8 @@ class SDBM100(BaseRangefinder):
             if not port:
                 raise RuntimeError("auto 未找到 SDBM-100：把 config rangefinder.port 写死为设备路径")
             print(f"[sdbm100] 自动找到串口：{port}")
-        self.ser = serial.Serial(port, self.baud, timeout=0.1)
+        # 读超时钳在 0.2s 以内：read() 每帧都调，超时太长会拖慢主循环节拍
+        self.ser = serial.Serial(port, self.baud, timeout=min(self.timeout_s, 0.2))
         self.ser.reset_input_buffer()
         self.ser.write(bytes([self.EXIT_CONT]))  # 退出可能存在的连续输出
         time.sleep(0.05)
@@ -154,7 +155,9 @@ class SDBM100(BaseRangefinder):
         try:
             if self.poll_each_read:
                 self.ser.write(self.build_read_result())
-            data = self.ser.read(256)
+            # 只等一帧（13 字节）：原来 read(256) 在 poll 模式下每帧都等满超时，
+            # 真实硬件一接上主循环就被拖到 ~10fps；按帧长读，健康模块 2ms 内返回
+            data = self.ser.read(self.FRAME_LEN)
             hit = self._scan(data)
             if hit is not None:
                 (self._last_m, self._last_quality), self._last_raw = hit
