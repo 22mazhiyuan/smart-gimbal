@@ -22,6 +22,10 @@ class RosTrackDetector(BaseDetector):
         self._latest = None
         self._lock = threading.Lock()
         self._node = None
+        self._spin_stop = threading.Event()
+        self._spin_thread = None
+        self._rclpy = None
+        self._owns_context = False
 
     def open(self):
         os.environ.setdefault("ROS_DOMAIN_ID", str(self.ros_domain_id))
@@ -35,7 +39,11 @@ class RosTrackDetector(BaseDetector):
         except ImportError:
             raise RuntimeError("没找到 anti_drone_interfaces，先 colcon build 装好")
         try:
-            rclpy.init()
+            from rclpy.signals import SignalHandlerOptions
+            if not rclpy.ok():
+                # main.py owns SIGINT/SIGTERM so timeout/systemd can stop it.
+                rclpy.init(signal_handler_options=SignalHandlerOptions.NO)
+                self._owns_context = True
         except RuntimeError:
             pass  # 已经初始化过（比如被别的节点 init 了）
         node = Node("smart_gimbal_track_sub")
@@ -46,13 +54,32 @@ class RosTrackDetector(BaseDetector):
 
         node.create_subscription(Track, self.topic, cb, 10)
         self._node = node
-        threading.Thread(target=rclpy.spin, args=(node,), daemon=True).start()
+        self._rclpy = rclpy
+        self._spin_stop.clear()
+
+        def spin():
+            from rclpy.executors import ExternalShutdownException, ShutdownException
+            try:
+                while not self._spin_stop.is_set() and rclpy.ok():
+                    rclpy.spin_once(node, timeout_sec=0.1)
+            except (ExternalShutdownException, ShutdownException):
+                pass
+
+        self._spin_thread = threading.Thread(target=spin, name="smart-gimbal-ros-spin", daemon=True)
+        self._spin_thread.start()
         print(f"[ROS] 已订阅 {self.topic}（ROS_DOMAIN_ID={os.environ['ROS_DOMAIN_ID']}，后台线程 spin）")
 
     def close(self):
+        self._spin_stop.set()
+        if self._spin_thread:
+            self._spin_thread.join(timeout=1.0)
+            self._spin_thread = None
         if self._node:
             self._node.destroy_node()
             self._node = None
+        if self._owns_context and self._rclpy and self._rclpy.ok():
+            self._rclpy.shutdown()
+        self._owns_context = False
 
     def _fresh(self, msg) -> bool:
         """valid_until 过期检查：过期即视为不可见（TTL 问题修复）。"""
@@ -82,8 +109,9 @@ class RosTrackDetector(BaseDetector):
             valid, conf = False, 0.0
         if not valid:
             return DetectionResult(frame_id=frame.frame_id, visible=False, conf=conf)
-        w = self.img_w or frame.image.shape[1]
-        h = self.img_h or frame.image.shape[0]
+        # A reconnect may change image dimensions; use the current real frame.
+        h, w = frame.image.shape[:2]
+        self.img_w, self.img_h = w, h
         cu = float(msg.center_u_px)
         cv = float(msg.center_v_px)
         seq = int(getattr(msg, "sequence", 0) or frame.frame_id)
@@ -105,4 +133,4 @@ def create_detector(cfg, img_w=0, img_h=0):
                                 m.get("conf_thresh", 0.4),
                                 m.get("ros_domain_id", 99))
     from detection.interface import MockDetector
-    return MockDetector()
+    return MockDetector(width=img_w or 1280, height=img_h or 720)

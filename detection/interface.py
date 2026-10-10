@@ -37,6 +37,9 @@ class MockDetector(BaseDetector):
     def close(self): pass
 
     def process(self, frame) -> DetectionResult:
+        # Mock pixels must use the actual decoded image, not a 1280x720 preset.
+        if getattr(frame, "image", None) is not None:
+            self.h, self.w = frame.image.shape[:2]
         cx, cy = self.w // 2, self.h // 2
         bw, bh = 60, 40
         x1, y1 = cx - bw // 2, int(cy + self._dv) - bh // 2

@@ -4,7 +4,9 @@
 停：Ctrl+C，先走停止路径，再关串口/视频/网页。
 """
 import os
+import signal
 import sys
+import threading
 import time
 
 sys.path.insert(0, ".")
@@ -39,8 +41,9 @@ def main():
         img_h, img_w = f0.image.shape[:2]
         logger.event(f"视频 OK：{img_w}x{img_h}")
     else:
-        img_w = cfg["video"]["width"] or 1280
-        img_h = cfg["video"]["height"] or 720
+        # Unknown RTSP size must be resolved from the eventual live frame.
+        img_w = cfg["video"]["width"] or 0
+        img_h = cfg["video"]["height"] or 0
         if cfg["video"]["source"] == "rtsp":
             logger.event("警告：RTSP 首帧未到，主循环将归零并持续重连")
     det = create_detector(cfg, img_w, img_h)  # 3. 模型加载：mock | ros_track
@@ -113,21 +116,46 @@ def main():
     print(f"[主循环] {rate}Hz 启动，Ctrl+C 退出")
     logger.event("主循环启动")
     stream_down = False
+    stop_requested = threading.Event()
+    stop_reason = ["正常结束"]
+    shutdown_done = False
+
+    def request_stop(signum, _frame):
+        stop_reason[0] = signal.Signals(signum).name
+        stop_requested.set()
+
+    signal.signal(signal.SIGTERM, request_stop)
+    signal.signal(signal.SIGINT, request_stop)
 
     def shutdown(reason):
+        nonlocal shutdown_done
+        if shutdown_done:
+            return
+        shutdown_done = True
         sm.stop(reason)
+        cleanup_errors = []
         try:
             if real:
                 drv.stop_all()
-        finally:
-            det.close(); rng.close(); src.close(); drv.close()
-            if focus_drv is not None:
-                focus_drv.close()
+        except Exception as exc:
+            cleanup_errors.append(f"运动停止：{exc}")
+        for name, component in (("检测器", det), ("测距", rng), ("视频", src),
+                                ("云台驱动", drv), ("对焦", focus_drv)):
+            if component is not None:
+                try:
+                    component.close()
+                except Exception as exc:
+                    cleanup_errors.append(f"{name}关闭：{exc}")
+        for error in cleanup_errors:
+            logger.event(f"停机清理异常：{error}")
         logger.finish({"mode": mode, "frames": frames,
-                       "state_history": sm.history, "result": reason})
+                       "state_history": sm.history, "result": reason,
+                       "cleanup_errors": cleanup_errors})
+        if cleanup_errors:
+            raise RuntimeError("停机清理异常：" + "; ".join(cleanup_errors))
 
     try:
-        while True:
+        while not stop_requested.is_set():
             t0 = time.monotonic()
             frame = src.read()
             if frame is None:
@@ -136,6 +164,9 @@ def main():
                     stream_down = True
                     sm.update(False, 0.0, dt=dt)
                     logger.event("视频断流：控制归零，持续重连")
+                mjpeg_server.update_status({"backend": backend, "motion_mode": mode,
+                                           "stream_connected": False, "visible": False,
+                                           "state": sm.state})
                 if real:
                     drv.stop(g["pitch_id"])
                 time.sleep(0.2)
@@ -181,10 +212,21 @@ def main():
                                                    fd_valid)
             if cv2 is not None:
                 img = mjpeg_server.draw_overlay(frame.image.copy(), d, state, fps, r,
-                                                mode, focus_dac)
+                                                mode, focus_dac, frame_id=frame.frame_id,
+                                                backend=backend)
                 ok, jpg = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 80])
                 if ok:
-                    mjpeg_server.push_frame(jpg.tobytes())
+                    metadata = {"frame_id": frame.frame_id, "width": img.shape[1],
+                                "height": img.shape[0], "fps": round(fps, 1),
+                                "backend": backend, "motion_mode": mode,
+                                "visible": bool(d.visible), "predicted": bool(d.predicted),
+                                "confidence": float(d.conf), "du_px": float(d.du_px),
+                                "dv_px": float(d.dv_px), "state": state,
+                                "label": d.label, "bbox": d.bbox_xyxy,
+                                "stream_connected": True}
+                    if hasattr(src, "stats"):
+                        metadata["source"] = src.stats()
+                    mjpeg_server.push_frame(jpg.tobytes(), metadata)
             logger.lat.mark(frame.frame_id, "show")
 
             logger.frame(frame.frame_id, d, state, pv, r, mode, focus_dac, focus_moved)
@@ -202,6 +244,11 @@ def main():
         logger.event(f"主循环异常：{e}")
         shutdown(f"异常退出：{e}")
         raise
+    else:
+        shutdown(stop_reason[0])
+    finally:
+        srv.shutdown()
+        srv.server_close()
 
 
 if __name__ == "__main__":
