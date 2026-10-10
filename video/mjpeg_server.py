@@ -205,7 +205,7 @@ def draw_overlay(img, det, state, fps, rng, mode, focus_dac=None,
             x2, y2 = max(0, min(w - 1, int(raw[2]))), max(0, min(h - 1, int(raw[3])))
             color = (0, 190, 255) if getattr(det, "observation_source", "YOLO") == "FEAR" else (0, 255, 0)
             cv2.rectangle(img, (x1, y1), (x2, y2), color, 2)
-            label = f"{det.label} {det.conf:.2f}"
+            label = "UAV"
             label_width = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.45, 1)[0][0]
             label_x = max(3, min(x1, w - label_width - 3))
             label_y = max(16, min(h - 3, y1 - 5))
