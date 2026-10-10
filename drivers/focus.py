@@ -53,23 +53,34 @@ class UVCFocusDriver(VCMDriver):
 
 
 class I2CFocusDriver(VCMDriver):
-    """Jetson I2C 直驱 VCM 驱动芯片。按芯片手册核对地址/寄存器后填实现。"""
-    def __init__(self, bus=1, addr=0x0C):
+    """Jetson I2C 直驱 VCM。
+
+    写 DAC 模式按两家独立仓库验证过的同一方案
+    （arducam/jetson_imx708_focus_example/Focuser.py、
+     ArduCAM/RaspberryPi Motorized_Focus_Camera/python/Focuser.py）：
+    I2C 地址 0x0C，10 位 DAC 拆两字节写（高 2 位 -> 寄存器 0x03，低 8 位 -> 0x04）。
+    地址/寄存器/位数做成参数：你的模组若不是这个方案，改配置即可。
+    上电先 i2cdetect 确认地址，再小步推 DAC 看镜头是否动。"""
+
+    def __init__(self, bus=1, addr=0x0C, reg_msb=0x03, reg_lsb=0x04, bits=10):
         self.bus, self.addr = bus, addr
+        self.reg_msb, self.reg_lsb, self.bits = reg_msb, reg_lsb, bits
 
     def open(self):
-        print(f"[VCM] I2C 占位：bus={self.bus} addr={hex(self.addr)}，"
-              "按芯片手册实现 set_dac 后删掉这行")
+        print(f"[VCM] I2C：bus={self.bus} addr={hex(self.addr)} "
+              f"reg={hex(self.reg_msb)}/{hex(self.reg_lsb)} {self.bits}bit")
 
     def close(self): pass
 
     def set_dac(self, dac: int):
-        # 示例（DW9800 类，核对手册！）：10bit DAC 拆 MSB/LSB 写 0x03/0x04
-        # import smbus2
-        # bus = smbus2.SMBus(self.bus)
-        # bus.write_byte_data(self.addr, 0x03, (dac >> 8) & 0x03)
-        # bus.write_byte_data(self.addr, 0x04, dac & 0xFF)
-        raise NotImplementedError("按上面注释和你的芯片手册实现 I2C 写 DAC")
+        import subprocess
+        dac = max(0, min((1 << self.bits) - 1, int(dac)))
+        msb, lsb = (dac >> 8) & 0x03, dac & 0xFF
+        a = f"0x{self.addr:02X}"
+        subprocess.run(["i2cset", "-y", str(self.bus), a,
+                        f"0x{self.reg_msb:02X}", str(msb)], check=True)
+        subprocess.run(["i2cset", "-y", str(self.bus), a,
+                        f"0x{self.reg_lsb:02X}", str(lsb)], check=True)
 
 
 def create(cfg):
@@ -78,5 +89,7 @@ def create(cfg):
     if kind == "uvc":
         return UVCFocusDriver(c.get("video_dev", "/dev/video0"))
     if kind == "i2c":
-        return I2CFocusDriver(c.get("i2c_bus", 1), c.get("i2c_addr", 0x0C))
+        return I2CFocusDriver(c.get("i2c_bus", 1), c.get("i2c_addr", 0x0C),
+                             c.get("i2c_reg_msb", 0x03), c.get("i2c_reg_lsb", 0x04),
+                             c.get("i2c_bits", 10))
     return MockFocusDriver()

@@ -70,6 +70,11 @@ autofocus:
   deadband_dac: 3             # 死区：DAC 变化小于此值不动，防抖动
   max_rate_hz: 2              # 最高调焦频率，防 hunting
   video_dev: "/dev/video0"    # uvc 驱动用（V4L2 设 control 不抢推流器的流）
+  i2c_bus: 1                  # i2c 用；地址/寄存器按 ArduCAM 两家仓库验证过的 VCM 方案
+  i2c_addr: 0x0C              # 实物不对就改配置，不用改代码
+  i2c_reg_msb: 0x03
+  i2c_reg_lsb: 0x04
+  i2c_bits: 10
   i2c_bus: 1
   i2c_addr: 0x0C
   valid_range_m: [0.5, 100.0]
