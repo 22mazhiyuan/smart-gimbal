@@ -218,7 +218,7 @@ def draw_overlay(img, det, state, fps, rng, mode, focus_dac=None,
                 raw[0] < w and raw[1] < h and raw[2] >= 0 and raw[3] >= 0):
             x1, y1 = max(0, min(w - 1, int(raw[0]))), max(0, min(h - 1, int(raw[1])))
             x2, y2 = max(0, min(w - 1, int(raw[2]))), max(0, min(h - 1, int(raw[3])))
-            color = (0, 190, 255) if getattr(det, "observation_source", "YOLO") == "FEAR" else (0, 255, 0)
+            color = (0, 255, 0)  # All measured YOLO/FEAR/Kalman boxes share one green display color.
             cv2.rectangle(img, (x1, y1), (x2, y2), color, 2)
             label = "UAV"
             label_width = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.45, 1)[0][0]
