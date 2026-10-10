@@ -1,0 +1,23 @@
+[Unit]
+Description=机载智能跟踪云台 smart_gimbal
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=jetson
+WorkingDirectory=/home/jetson/visual_gimbal_lab/smart_gimbal
+Environment=ROS_DOMAIN_ID=99
+# 检测后端走 config.yaml（默认 mock）。要上真实检测，取消下一行注释，
+# 但前提是 Codex 的 RTSP 推流和 ros_track 检测节点也做了开机自启，
+# 否则 main.py 会一直重连等流（不会崩，但没画面）。
+# Environment=SMART_GIMBAL_DETECTOR=ros_track
+# 安全：开机自启永远不开真实云台运动，真机联调手动开 GIMBAL_REAL_MOTION=1。
+ExecStart=/bin/bash -c 'source /opt/ros/humble/setup.bash 2>/dev/null; exec python3 main.py'
+Restart=on-failure
+RestartSec=15
+StandardOutput=append:/home/jetson/visual_gimbal_lab/smart_gimbal/runlog/systemd.log
+StandardError=append:/home/jetson/visual_gimbal_lab/smart_gimbal/runlog/systemd.log
+
+[Install]
+WantedBy=multi-user.target
