@@ -36,6 +36,18 @@ ibvs:
   lost_timeout_s: 1.0
   enable_yaw: false           # 本云台无偏航轴；du 交给机体偏航（预留接口）
 
+fine_point:
+  enabled: true               # 精瞄总开关（粗精两级中的精级）：ROI 内质心算法
+  roi_expand: 1.5             # ROI=检测框外扩倍数
+  min_area_px: 9.0            # 团块最小像素面积，小于此视为无效
+  max_roi_cover: 0.5          # 团块占 ROI 超过此比例视为背景，取反重试
+  smooth_alpha: 0.5           # 精瞄点 EMA 平滑系数（1=不平滑）
+  engage_radius_px: 40.0      # 粗误差收敛到此半径内才切精瞄档
+  kp: 0.08                    # 精瞄档 IBVS：更小死区、更小限速、更柔变化率
+  deadzone_px: 3.0
+  max_vel_dps: 10.0
+  slew_dps2: 60.0
+
 gimbal:
   mode: "mock"                # mock | real（real 需 GIMBAL_REAL_MOTION=1）
   port: "auto"                # auto=按 VID:PID+序列号自动识别；或写 /dev/ts6004_rs485

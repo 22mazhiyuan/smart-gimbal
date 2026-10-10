@@ -208,7 +208,7 @@ class _MJPEGServer(ThreadingHTTPServer):
 
 
 def draw_overlay(img, det, state, fps, rng, mode, focus_dac=None,
-                 frame_id=0, backend="mock"):
+                 frame_id=0, backend="mock", fine_res=None, aim_mode="coarse"):
     """绘制紧凑 HUD；仅裁剪绘制坐标，绝不修改 raw bbox 或控制 du/dv。"""
     h, w = img.shape[:2]
     if det.visible and not det.predicted:
@@ -227,13 +227,22 @@ def draw_overlay(img, det, state, fps, rng, mode, focus_dac=None,
             cv2.putText(img, label, (label_x, label_y), cv2.FONT_HERSHEY_SIMPLEX,
                         0.45, color, 1, cv2.LINE_AA)
     cv2.drawMarker(img, (w // 2, h // 2), (0, 0, 255), cv2.MARKER_CROSS, 18, 1)
+    fine_on = bool(getattr(fine_res, "valid", False))
+    if fine_on:
+        fx, fy = int(fine_res.fx), int(fine_res.fy)
+        if 0 <= fx < w and 0 <= fy < h:
+            # 精瞄点：黄色小十字，与绿框、红色画面中心区分
+            cv2.drawMarker(img, (fx, fy), (0, 255, 255),
+                           cv2.MARKER_CROSS, 14, 2)
     dac_text = f"{focus_dac:.0f}" if _finite_numeric(focus_dac) else "--"
     distance_m = getattr(rng, "distance_m", None)
     dist_valid = bool(getattr(rng, "valid", False)) and _finite_numeric(distance_m)
     dist_text = f"{distance_m:.2f} m VALID" if dist_valid else "N/A INVALID"
+    aim_text = f"AIM {aim_mode}" + (" FINE-LOCK" if fine_on and aim_mode == "fine" else "")
     lines = [f"#{frame_id}  {w}x{h}  {fps:.1f} FPS",
              f"DET {str(backend)[:32]} | MOT {mode} | {state}",
-             f"focus DAC {dac_text} | dist {dist_text}"]
+             f"focus DAC {dac_text} | dist {dist_text}",
+             aim_text]
     font = cv2.FONT_HERSHEY_SIMPLEX
     widest = max(cv2.getTextSize(text, font, 0.43, 1)[0][0] for text in lines)
     scale = 0.43 * min(1.0, max(0.2, (w - 12) / max(1, widest)))

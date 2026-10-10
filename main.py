@@ -106,6 +106,16 @@ def main():
 
     sm = StateMachine(cfg)
     tracker = IBVSTracker(IBVSConfig(cfg))
+    from tracking.fine_point import FinePointTracker, FinePointResult
+    fine = FinePointTracker(cfg)
+    fc = cfg.get("fine_point", {})
+    tracker_fine = IBVSTracker(IBVSConfig(
+        cfg, kp=fc.get("kp", 0.08), deadzone_px=fc.get("deadzone_px", 3.0),
+        max_vel_dps=fc.get("max_vel_dps", 10.0),
+        slew_dps2=fc.get("slew_dps2", 60.0)))
+    logger.event(f"精瞄 {'开' if fine.enabled else '关'}：engage 半径 "
+                 f"{fine.engage_radius_px}px，精瞄档死区 "
+                 f"{fc.get('deadzone_px', 3.0)}px")
     srv, mjpeg_port = mjpeg_server.serve(cfg["video"]["mjpeg_port"])
     logger.event(f"画面服务端口 {mjpeg_port}")
     rate = g["rate_hz"]
@@ -181,8 +191,24 @@ def main():
             d = det.process(frame)            # 同一 frame_id 全链路
             logger.lat.mark(frame.frame_id, "infer")
 
+            # 精瞄（粗精两级之精级）：有效观测时在 ROI 内算精确点；
+            # 无效/预测/找不到团块时回退用框中心，绝不硬算假点。
+            if d.visible and not d.predicted:
+                fine_res = fine.update(frame.image, d.bbox_xyxy)
+            else:
+                fine_res = FinePointResult(valid=False, reason="no-obs")
+                fine.reset()
+            engage_r = fine.engage_radius_px
+            use_fine = (fine_res.valid and abs(d.du_px) < engage_r
+                        and abs(d.dv_px) < engage_r)
+
             state = sm.update(d.visible and not d.predicted, d.conf, dt=dt)
-            pv, yv = tracker.update(d.du_px, d.dv_px, state == TRACK, dt)
+            pv_c, yv_c = tracker.update(d.du_px, d.dv_px, state == TRACK, dt)
+            pv_f, yv_f = tracker_fine.update(
+                fine_res.fdu_px, fine_res.fdv_px,
+                state == TRACK and use_fine, dt)
+            pv, yv = (pv_f, yv_f) if use_fine else (pv_c, yv_c)
+            aim_mode = "fine" if use_fine else "coarse"
             logger.lat.mark(frame.frame_id, "cmd")
 
             fault = None
@@ -215,7 +241,8 @@ def main():
             if cv2 is not None:
                 img = mjpeg_server.draw_overlay(frame.image.copy(), d, state, fps, r,
                                                 mode, focus_dac, frame_id=frame.frame_id,
-                                                backend=backend)
+                                                backend=backend, fine_res=fine_res,
+                                                aim_mode=aim_mode)
                 ok, jpg = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 80])
                 if ok:
                     metadata = {"frame_id": frame.frame_id, "width": img.shape[1],
@@ -226,6 +253,10 @@ def main():
                                 "confidence": float(d.conf), "du_px": float(d.du_px),
                                 "dv_px": float(d.dv_px), "state": state,
                                 "label": d.label, "bbox": d.bbox_xyxy,
+                                "aim_mode": aim_mode,
+                                "fine_valid": bool(fine_res.valid),
+                                "fine_fx": round(fine_res.fx, 1) if fine_res.valid else None,
+                                "fine_fy": round(fine_res.fy, 1) if fine_res.valid else None,
                                 "focus_dac": focus_dac,
                                 "dist_m": r.distance_m if r.valid else None,
                                 "dist_valid": bool(r.valid),
@@ -235,7 +266,8 @@ def main():
                     mjpeg_server.push_frame(jpg.tobytes(), metadata)
             logger.lat.mark(frame.frame_id, "show")
 
-            logger.frame(frame.frame_id, d, state, pv, r, mode, focus_dac, focus_moved)
+            logger.frame(frame.frame_id, d, state, pv, r, mode, focus_dac, focus_moved,
+                         fine_res=fine_res, aim_mode=aim_mode)
             frames += 1
             last_fps_n += 1
             if time.monotonic() - last_fps_t >= 2.0:

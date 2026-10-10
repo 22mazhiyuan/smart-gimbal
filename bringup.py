@@ -114,6 +114,31 @@ def check_gimbal_readonly(cfg):
         d.close()
 
 
+def check_fine_point(cfg):
+    print("== 精瞄 ==")
+    c = cfg.get("fine_point", {})
+    if not c.get("enabled", True):
+        print("  未启用（fine_point.enabled=false），只用框中心粗跟踪")
+        return
+    try:
+        from tracking.fine_point import FinePointTracker
+        fine = FinePointTracker(cfg)
+        print(f"  算法 OK：ROI 外扩 {fine.roi_expand}x，engage 半径 "
+              f"{fine.engage_radius_px}px")
+        print(f"  精瞄档 IBVS：kp={c.get('kp')} 死区={c.get('deadzone_px')}px "
+              f"限速={c.get('max_vel_dps')}°/s")
+        problems = []
+        if fine.roi_expand < 1.0:
+            problems.append("roi_expand<1 无意义")
+        if not (0.0 < fine.smooth_alpha <= 1.0):
+            problems.append("smooth_alpha 应在 (0,1]")
+        if c.get("deadzone_px", 3.0) >= cfg["ibvs"]["deadzone_px"]:
+            problems.append("精瞄档死区应小于粗跟踪档死区")
+        print("  " + ("参数 OK" if not problems else "参数问题：" + "; ".join(problems)))
+    except Exception as e:
+        print(f"  精瞄模块加载失败：{e}")
+
+
 def main():
     print("# 机载智能跟踪云台 · 联调自检\n")
     check_deps()
@@ -121,6 +146,7 @@ def main():
     check_video(cfg)
     check_model(cfg)
     check_autofocus(cfg)
+    check_fine_point(cfg)
     check_serial(cfg)
     check_gimbal_readonly(cfg)
     print("\n自检完成。mock 全绿即可跑主程序：python3 main.py")
