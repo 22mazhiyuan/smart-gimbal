@@ -7,15 +7,14 @@
 Codex，硬件到了，smart_gimbal 到货联调，一次做完。仓库 /home/jetson/visual_gimbal_lab/smart_gimbal，先 git pull 到最新（应看到 3723450）。
 
 
-1）接线：模块供电 3.3V（不是 5V），TTL/UART 经 USB 转 TTL 接 Jetson。先别上电，把接线拍照发我确认。
+1）接线：模块供电 3.3V（原厂手册：2.5~3.3V，绝对最大 5.5V；300mA+）。引脚：1=PWREN（高电平有效，上电前拉高）、2=TXD（开漏）、3=RXD（开漏）、4=VCC、5=GND。TTL/UART 经 USB 转 TTL 接 Jetson；USB 转 TTL 小板内部已有上拉可不加，直连 Jetson 排针无数据再加上拉。禁止带电接线。先别上电，把接线拍照发我确认。
 2）上电后跑：python3 tools/rangefinder_test.py --port /dev/ttyUSBx --frames 10
-（port 用 auto 或实际设备名；先试波特率 115200，不通再试 19200）
-3）看输出：必须出现 raw= 开头的 13 字节 hex 帧；工具会同时算大端和小端两种距离，
-拿一个已知距离的目标（如 5 米外的墙）对照，哪个准用哪个。
-4）如果上电就自动往外吐帧（没发命令也有输出），记下来：config 里 poll_each_read 改 false。
+（port 用 auto 或实际设备名；波特率先试 19200，原厂默认，不通再试 115200）
+3）看输出：必须出现 raw= 开头的 13 字节 hex 帧。帧格式（原厂手册已核实）：[0]=0xAA，[1]=地址，[2:3]=寄存器，[4:5]=有效计算，[6:9]=距离大端毫米，[10:11]=信号质量（越小越强），[12]=校验（除首字节外求和）。读命令 AA 80 00 22 A2（驱动已按手册核实无误）。拿一个已知距离的目标（如 5 米外的墙）对照距离是否准。
+4）如果上电就自动往外吐帧（没发命令也有输出），记下来：config 里 poll_each_read 改 false。想开连续测量：发 AA 00 00 20 00 01 00 04 25；停止发单字节 0x58。
 5）定下来后改 config.yaml：rangefinder.backend=sdbm100，baud/byteorder/poll_each_read 按实测填，
 然后 python3 bringup.py 确认测距项通过。
-6）如果 30 秒没收到有效帧：检查接线、波特率、port 是否写对，把完整输出贴回来停下，不要猜。
+6）如果 30 秒没收到有效帧：先查 PWREN 是否拉高、上拉电阻，再查波特率、port 是否写对，把完整输出贴回来停下，不要猜。状态码对照纸质手册（0x0000=无错误；深色目标出现弱信号码属正常，先别慌）。
 
 
 1）插上后跑：udevadm info -a -n /dev/ttyUSBx | grep -i serial，记下序列号。
