@@ -52,10 +52,14 @@ gimbal:
   soft_limit_deg: []          # 实测后填，如 [-45.0, 45.0]；空着 real 模式拒绝启动
 
 rangefinder:
-  backend: "mock"             # mock | sdbm100（到货后 Codex 对接协议）
-  port: "auto"
-  baud: 115200
+  backend: "mock"             # mock | sdbm100（20Hz 超强版已购，到货后切 sdbm100）
+  port: "auto"                # auto 探测 /dev/ttyUSB*，或写死如 /dev/ttyUSB2
+  baud: 115200                # 20Hz 版按厂家资料用 115200；若不通改 19200
   timeout_s: 1.0
+  address: 0x00               # 模块地址，bit7 读标志由驱动自动加
+  byteorder: "big"            # 距离 4 字节序；实测对不上改 "little"
+  max_age_ms: 500             # 超过此年龄 valid=false，不用旧值冒充
+  poll_each_read: true        # true 每帧发读命令；模块若自动连续输出改 false
 
 autofocus:
   enabled: false              # 测距辅助对焦总开关（手机激光对焦原理）
