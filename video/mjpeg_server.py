@@ -203,13 +203,14 @@ def draw_overlay(img, det, state, fps, rng, mode, focus_dac=None,
                 raw[0] < w and raw[1] < h and raw[2] >= 0 and raw[3] >= 0):
             x1, y1 = max(0, min(w - 1, int(raw[0]))), max(0, min(h - 1, int(raw[1])))
             x2, y2 = max(0, min(w - 1, int(raw[2]))), max(0, min(h - 1, int(raw[3])))
-            cv2.rectangle(img, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            color = (0, 190, 255) if getattr(det, "observation_source", "YOLO") == "FEAR" else (0, 255, 0)
+            cv2.rectangle(img, (x1, y1), (x2, y2), color, 2)
             label = f"{det.label} {det.conf:.2f}"
             label_width = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.45, 1)[0][0]
             label_x = max(3, min(x1, w - label_width - 3))
             label_y = max(16, min(h - 3, y1 - 5))
             cv2.putText(img, label, (label_x, label_y), cv2.FONT_HERSHEY_SIMPLEX,
-                        0.45, (0, 255, 0), 1, cv2.LINE_AA)
+                        0.45, color, 1, cv2.LINE_AA)
     cv2.drawMarker(img, (w // 2, h // 2), (0, 0, 255), cv2.MARKER_CROSS, 18, 1)
     lines = [f"#{frame_id}  {w}x{h}  {fps:.1f} FPS",
              f"DET {str(backend)[:32]} | MOT {mode} | {state}"]

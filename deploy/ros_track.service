@@ -4,10 +4,13 @@ Description=Existing camera RTSP and ros_track runtime (shared process)
 [Service]
 Type=simple
 User=jetson
-WorkingDirectory=/home/jetson/visual_gimbal_lab/multirotor_accuracy_repair_20261009
+WorkingDirectory=/home/jetson/visual_gimbal_lab/multirotor_accuracy_repair
 Environment=ROS_DOMAIN_ID=99
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/bin/bash -c 'source /opt/ros/humble/setup.bash && source /home/jetson/anti_drone_ws/install/setup.bash && exec /bin/bash /home/jetson/visual_gimbal_lab/multirotor_accuracy_repair_20261009/start_detector.sh'
+Environment=GIMBAL_REAL_MOTION=0
+Environment=MULTIROTOR_TRACKER_ROOT=/home/jetson/multirotor_tracker
+Environment=SMART_GIMBAL_CONFIG=/home/jetson/visual_gimbal_lab/smart_gimbal/config.yaml
+ExecStart=/bin/bash -c 'source /opt/ros/humble/setup.bash && source /home/jetson/anti_drone_ws/install/setup.bash && exec /bin/bash /home/jetson/visual_gimbal_lab/multirotor_accuracy_repair/start_detector.sh'
 Restart=on-failure
 RestartSec=15
 

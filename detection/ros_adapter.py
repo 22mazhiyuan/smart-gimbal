@@ -5,6 +5,8 @@ visible 判定：is_primary 且 lost_frames==0 且置信度达标 且 valid_unti
 du/dv = 目标中心 - 画面中心（画面尺寸按视频帧实际宽高，不写死）。
 """
 import os
+import json
+from collections import OrderedDict
 import threading
 import time
 
@@ -20,6 +22,7 @@ class RosTrackDetector(BaseDetector):
         self.conf_thresh = conf_thresh
         self.ros_domain_id = ros_domain_id
         self._latest = None
+        self._fusion = OrderedDict()
         self._lock = threading.Lock()
         self._node = None
         self._spin_stop = threading.Event()
@@ -53,6 +56,18 @@ class RosTrackDetector(BaseDetector):
                 self._latest = msg
 
         node.create_subscription(Track, self.topic, cb, 10)
+        from std_msgs.msg import String
+        def fusion_cb(msg):
+            try:
+                data = json.loads(msg.data)
+                sequence = int(data["sequence"])
+            except (ValueError, KeyError, TypeError):
+                return
+            with self._lock:
+                self._fusion[sequence] = data
+                while len(self._fusion) > 20:
+                    self._fusion.popitem(last=False)
+        node.create_subscription(String, "/counter_uav/tracking/fusion_status", fusion_cb, 20)
         self._node = node
         self._rclpy = rclpy
         self._spin_stop.clear()
@@ -97,6 +112,7 @@ class RosTrackDetector(BaseDetector):
     def process(self, frame) -> DetectionResult:
         with self._lock:
             msg = self._latest
+            provenance = self._fusion.get(int(getattr(msg, "sequence", 0))) if msg is not None else None
         if msg is None:
             return DetectionResult(frame_id=frame.frame_id, visible=False)
         try:
@@ -109,18 +125,27 @@ class RosTrackDetector(BaseDetector):
             valid, conf = False, 0.0
         if not valid:
             return DetectionResult(frame_id=frame.frame_id, visible=False, conf=conf)
+        # Fusion mode requires exact-sequence provenance; unknown/prediction is
+        # fail-closed, never a green detector box. Compatibility without metadata
+        # remains for old detector-only publishers until the first fusion status.
+        source = provenance.get("source", "NONE") if provenance else "YOLO"
+        if self._fusion and (provenance is None or source not in ("YOLO", "FEAR") or
+                             provenance.get("prediction_hidden", False)):
+            return DetectionResult(frame_id=frame.frame_id, visible=False, conf=conf)
         # A reconnect may change image dimensions; use the current real frame.
         h, w = frame.image.shape[:2]
         self.img_w, self.img_h = w, h
         cu = float(msg.center_u_px)
         cv = float(msg.center_v_px)
         seq = int(getattr(msg, "sequence", 0) or frame.frame_id)
-        return DetectionResult(
+        result = DetectionResult(
             frame_id=seq, visible=True,
             bbox_xyxy=(float(msg.xmin_px), float(msg.ymin_px),
                        float(msg.xmax_px), float(msg.ymax_px)),
-            label=str(getattr(msg, "class_name", "") or ""),
+            label=str(getattr(msg, "class_name", "") or "") + " [" + source + "]",
             conf=conf, du_px=cu - w / 2.0, dv_px=cv - h / 2.0)
+        result.observation_source = source
+        return result
 
 
 def create_detector(cfg, img_w=0, img_h=0):
