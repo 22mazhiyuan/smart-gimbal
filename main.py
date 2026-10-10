@@ -220,7 +220,8 @@ def main():
                 if ok:
                     metadata = {"frame_id": frame.frame_id, "width": img.shape[1],
                                 "height": img.shape[0], "fps": round(fps, 1),
-                                "backend": backend, "motion_mode": mode,
+                                "backend": backend, "observation_source": getattr(d, "observation_source", None),
+                                "motion_mode": mode,
                                 "visible": bool(d.visible), "predicted": bool(d.predicted),
                                 "confidence": float(d.conf), "du_px": float(d.du_px),
                                 "dv_px": float(d.dv_px), "state": state,
