@@ -107,7 +107,7 @@ class RTSPSource:
     def read(self):
         # 首帧短暂等待；正常等待新帧避免轮询暂时无帧导致 false LOST。
         with self._cv:
-            wait_s = 1.0 if self._first_read else 0.2
+            wait_s = 6.0 if self._first_read else 0.2
             self._first_read = False
             deadline = time.monotonic() + wait_s
             while not self._stop.is_set():
