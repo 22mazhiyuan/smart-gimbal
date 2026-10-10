@@ -13,7 +13,7 @@ sudo -u jetson bash -c "cd $APP && python3 bringup.py" || true
 echo "=== 启动服务 ==="
 systemctl restart smart_gimbal
 sleep 3
-systemctl is-active smart_gimbal
+systemctl is-active smart_gimbal || echo "服务未起来，看日志：journalctl -u smart_gimbal -n 50"
 
 echo ""
 echo "画面：http://<jetson-ip>:8080/video"

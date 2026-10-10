@@ -15,6 +15,15 @@ python3 main.py       # 一条命令启动全部
 
 真实云台：`GIMBAL_REAL_MOTION=1 python3 main.py`（先过守门顺序，软限位空着拒绝启动）。
 
+## 开机自启
+
+```bash
+sudo bash deploy/install_autostart.sh   # 装好后通电自动跑 main.py，崩溃自动重启
+```
+
+默认全 mock，真实云台运动永不自启。依赖 Codex 的 `rtsp_stream.service` /
+`ros_track.service` 先起（已写 After 顺序）。停用：`sudo systemctl disable --now smart_gimbal`。
+
 ## 目录
 
 | 文件 | 对应文档 |
