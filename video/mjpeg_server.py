@@ -29,7 +29,8 @@ def update_status(metadata):
     """更新状态，不伪造新视频帧或刷新最后一帧的时间。
 
     推荐字段：frame_id,width,height,fps,backend,motion_mode,visible,predicted,
-    confidence,du_px,dv_px,state,stream_connected。额外 JSON 字段原样保留。
+    confidence,du_px,dv_px,state,stream_connected,focus_dac,dist_m,dist_valid。
+    dist_valid 为 false 时 dist_m 统一为 None；额外 JSON 字段原样保留。
     """
     if metadata is not None:
         with _frames:
@@ -51,9 +52,17 @@ def push_frame(jpg_bytes, metadata=None):
         _frames.notify_all()
 
 
+def _finite_numeric(value):
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+
+
 def _status_snapshot(server_id):
     with _frames:
         result = copy.deepcopy(_status)
+        result.setdefault("focus_dac", None)
+        result["dist_valid"] = bool(result.get("dist_valid", False))
+        if not result["dist_valid"] or not _finite_numeric(result.get("dist_m")):
+            result["dist_m"] = None
         result.update(server_id=server_id, stream_seq=_stream_seq,
                       has_frame=_latest_jpg is not None,
                       frame_age_ms=(round((time.monotonic() - _last_frame_at) * 1000, 1)
@@ -79,11 +88,13 @@ button{background:#2d4767;color:white;border:1px solid #54759b;border-radius:6px
 <section class="status" aria-live="polite">
 <div id="videoInfo">视频：等待首帧</div><div id="backendInfo">检测后端：读取中 · 运动模式：读取中</div>
 <div id="targetInfo">未发现有效目标</div><div id="freshness" class="warn">画面新鲜度：读取中</div>
+<div id="focusInfo">对焦 DAC：未启用/不可用</div><div id="distanceInfo" class="warn">测距：无效 · dist_valid=false</div>
 <div class="note">完整画面等比显示；新鲜度仅为服务器最新帧年龄，不是端到端延迟。</div>
 </section><section class="stage"><img id="picture" alt="实时视频，完整等比显示"></section>
 </main><script>
 const picture=document.getElementById('picture');let reconnectTimer=null;let lastServer=null;
-const number=(v,n=1)=>Number.isFinite(Number(v))?Number(v).toFixed(n):'--';
+const isNumber=v=>typeof v==='number'&&Number.isFinite(v);
+const number=(v,n=1)=>isNumber(v)?v.toFixed(n):'--';
 function connect(){clearTimeout(reconnectTimer);picture.src='/stream.mjpg?client='+Date.now();}
 document.getElementById('reconnect').onclick=connect;
 document.getElementById('fullscreen').onclick=()=>{const fn=document.documentElement.requestFullscreen;if(fn)fn.call(document.documentElement).catch(()=>{});};
@@ -97,8 +108,12 @@ async function poll(){
   document.getElementById('backendInfo').textContent='检测后端：'+(s.backend??'--')+' · 运动模式：'+(s.motion_mode??'--');
   const visible=Boolean(s.visible)&&!s.predicted;
   document.getElementById('targetInfo').textContent=visible?'有效目标'+(s.label?' '+s.label:'')+' · 置信 '+number(s.confidence??s.conf,2)+' · du '+number(s.du_px)+' / dv '+number(s.dv_px)+' px':'未发现有效目标';
+  document.getElementById('focusInfo').textContent='对焦 DAC：'+(isNumber(s.focus_dac)?number(s.focus_dac,0):'未启用/不可用');
+  const distance=document.getElementById('distanceInfo');const distValid=s.dist_valid===true;const distanceOK=distValid&&isNumber(s.dist_m);
+  distance.className=distanceOK?'ok':'warn';
+  distance.textContent='测距：'+(distanceOK?number(s.dist_m,2)+' m · 有效':'无效')+' · dist_valid='+String(distValid);
   const fresh=document.getElementById('freshness');const age=s.frame_age_ms;
-  const ok=s.has_frame&&age!==null&&age<2000&&s.stream_connected!==false;
+  const ok=s.has_frame&&isNumber(age)&&age<2000&&s.stream_connected!==false;
   fresh.className=ok?'ok':'warn';fresh.textContent='画面新鲜度：'+(!s.has_frame?'等待首帧':s.stream_connected===false?'视频断流，等待重连 · '+number(age,0)+' ms':number(age,0)+' ms'+(ok?'':'（最新帧已陈旧）'));
  }catch(e){const fresh=document.getElementById('freshness');fresh.className='warn';fresh.textContent='状态连接失败：'+e.message;}}
  setTimeout(poll,500);
@@ -212,13 +227,18 @@ def draw_overlay(img, det, state, fps, rng, mode, focus_dac=None,
             cv2.putText(img, label, (label_x, label_y), cv2.FONT_HERSHEY_SIMPLEX,
                         0.45, color, 1, cv2.LINE_AA)
     cv2.drawMarker(img, (w // 2, h // 2), (0, 0, 255), cv2.MARKER_CROSS, 18, 1)
+    dac_text = f"{focus_dac:.0f}" if _finite_numeric(focus_dac) else "--"
+    distance_m = getattr(rng, "distance_m", None)
+    dist_valid = bool(getattr(rng, "valid", False)) and _finite_numeric(distance_m)
+    dist_text = f"{distance_m:.2f} m VALID" if dist_valid else "N/A INVALID"
     lines = [f"#{frame_id}  {w}x{h}  {fps:.1f} FPS",
-             f"DET {str(backend)[:32]} | MOT {mode} | {state}"]
+             f"DET {str(backend)[:32]} | MOT {mode} | {state}",
+             f"focus DAC {dac_text} | dist {dist_text}"]
     font = cv2.FONT_HERSHEY_SIMPLEX
     widest = max(cv2.getTextSize(text, font, 0.43, 1)[0][0] for text in lines)
     scale = 0.43 * min(1.0, max(0.2, (w - 12) / max(1, widest)))
     line_h = max(12, cv2.getTextSize("Ag", font, scale, 1)[0][1] + 7)
-    hud_h = min(h, line_h * 2 + 5)
+    hud_h = min(h, line_h * len(lines) + 5)
     shade = img[:hud_h, :].copy()
     shade[:] = 0
     img[:hud_h, :] = cv2.addWeighted(shade, 0.65, img[:hud_h, :], 0.35, 0)

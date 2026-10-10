@@ -166,6 +166,8 @@ def main():
                     logger.event("视频断流：控制归零，持续重连")
                 mjpeg_server.update_status({"backend": backend, "motion_mode": mode,
                                            "stream_connected": False, "visible": False,
+                                           "focus_dac": None, "dist_m": None,
+                                           "dist_valid": False,
                                            "state": sm.state})
                 if real:
                     drv.stop(g["pitch_id"])
@@ -223,6 +225,9 @@ def main():
                                 "confidence": float(d.conf), "du_px": float(d.du_px),
                                 "dv_px": float(d.dv_px), "state": state,
                                 "label": d.label, "bbox": d.bbox_xyxy,
+                                "focus_dac": focus_dac,
+                                "dist_m": r.distance_m if r.valid else None,
+                                "dist_valid": bool(r.valid),
                                 "stream_connected": True}
                     if hasattr(src, "stats"):
                         metadata["source"] = src.stats()
