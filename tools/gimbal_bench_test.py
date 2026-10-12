@@ -10,6 +10,7 @@
 全部读通才算过；任何一帧超时/异常都算失败，不继续。
 """
 import argparse
+import os
 import sys
 import time
 
@@ -19,6 +20,11 @@ from drivers.ts6004_driver import TS6004
 
 
 def main():
+    if os.environ.get("GIMBAL_REAL_MOTION") != "1":
+        print("FAIL：台架测试需要真实硬件，请这样跑：")
+        print("  GIMBAL_REAL_MOTION=1 python3 tools/xxx.py --port /dev/ttyUSBn ...")
+        print("注意：只用于台架测试工具，main.py 主程序保持默认不开。")
+        return 1
     ap = argparse.ArgumentParser()
     ap.add_argument("--port", required=True, help="RS485 串口，如 /dev/ttyUSB1")
     ap.add_argument("--ids", nargs="+", type=int, default=[1, 2],

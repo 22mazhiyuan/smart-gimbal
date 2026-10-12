@@ -1,5 +1,6 @@
 """台架点动测试：单次小角度点动，实测脉冲当量（守门第 2 步）。"""
 import argparse
+import os
 import sys
 import time
 
@@ -13,6 +14,11 @@ MAX_PULSES = 5000
 
 
 def main():
+    if os.environ.get("GIMBAL_REAL_MOTION") != "1":
+        print("FAIL：台架测试需要真实硬件，请这样跑：")
+        print("  GIMBAL_REAL_MOTION=1 python3 tools/xxx.py --port /dev/ttyUSBn ...")
+        print("注意：只用于台架测试工具，main.py 主程序保持默认不开。")
+        return 1
     ap = argparse.ArgumentParser()
     ap.add_argument("--port", required=True)
     ap.add_argument("--id", type=int, required=True, help="站号")
