@@ -1,13 +1,5 @@
-"""台架只读测试：纯读寄存器，不发任何运动指令（守门第 1 步）。
-
-用法（Jetson 上）：
-    python3 tools/gimbal_bench_test.py --port /dev/ttyUSBx --ids 1 2
-
-只做三件事，每站号读三帧：
-  1. 状态寄存器（6007）
-  2. 位置反馈（5004，u64 脉冲 + 换算度）
-  3. 速度反馈
-全部读通才算过；任何一帧超时/异常都算失败，不继续。
+"""台架只读测试（0x3E 协议）：纯读，不发运动指令（守门第 1 步）。
+用法：GIMBAL_REAL_MOTION=1 python3 tools/gimbal_bench_test.py --port /dev/ttyUSB0 --ids 1 2 --baud 460800
 """
 import argparse
 import os
@@ -16,27 +8,23 @@ import time
 
 sys.path.insert(0, ".")
 
-from drivers.ts6004_driver import TS6004
-
 
 def main():
     if os.environ.get("GIMBAL_REAL_MOTION") != "1":
-        print("FAIL：台架测试需要真实硬件，请这样跑：")
-        print("  GIMBAL_REAL_MOTION=1 python3 tools/xxx.py --port /dev/ttyUSBn ...")
-        print("注意：只用于台架测试工具，main.py 主程序保持默认不开。")
+        print("FAIL：需要 GIMBAL_REAL_MOTION=1")
         return 1
     ap = argparse.ArgumentParser()
-    ap.add_argument("--port", required=True, help="RS485 串口，如 /dev/ttyUSB1")
-    ap.add_argument("--ids", nargs="+", type=int, default=[1, 2],
-                    help="站号列表，默认 1 2")
-    ap.add_argument("--baud", type=int, default=115200)
+    ap.add_argument("--port", required=True)
+    ap.add_argument("--ids", nargs="+", type=int, default=[1, 2])
+    ap.add_argument("--baud", type=int, default=460800)
     args = ap.parse_args()
 
-    drv = TS6004(port=args.port, baud=args.baud)
+    from drivers.mwd_3e_driver import MWD3E
+    drv = MWD3E(port=args.port, baud=args.baud)
     try:
         drv.open()
     except Exception as e:
-        print(f"FAIL：串口打不开 {args.port}：{e}")
+        print(f"FAIL：串口打不开：{e}")
         return 1
 
     ok = True
@@ -45,14 +33,16 @@ def main():
             print(f"== 站号 {sid} ==")
             for i in range(3):
                 try:
-                    st = drv.read_status(sid)
-                    pos_pulse = drv.read_position_pulses(sid)
-                    pos_deg = drv.read_position_deg(sid)
+                    s1 = drv.read_status1(sid)
+                    pos = drv.read_position_deg(sid)
                     spd = drv.read_speed_dps(sid)
-                    print(f"  帧{i+1}：状态={st} 位置={pos_pulse}脉冲 "
-                          f"({pos_deg:.2f}°) 速度={spd:.2f}°/s")
+                    print(f"  帧{i+1}：温度={s1['temp']}℃ 电压={s1['vbus']:.2f}V "
+                          f"电流={s1['ibus']:.2f}A 运行={s1['run']:#x} 故障={s1['fault']:#x}")
+                    print(f"       位置={pos:.2f}° 速度={spd:.1f}°/s")
+                    if s1["fault"]:
+                        print(f"  WARN：站{sid} 有故障标志 {s1['fault']:#x}")
                 except Exception as e:
-                    print(f"  帧{i+1}：FAIL：{e}")
+                    print(f"  帧{i+1} FAIL：{e}")
                     ok = False
                     break
                 time.sleep(0.2)
@@ -62,9 +52,9 @@ def main():
         drv.close()
 
     if ok:
-        print("PASS：双站号只读三帧全通，下一步：空载小角度点动")
+        print("PASS：只读全通，下一步点动")
         return 0
-    print("FAIL：有读失败，检查接线/站号/波特率，不进入点动")
+    print("FAIL：有读失败，检查接线/站号/波特率")
     return 1
 
 
