@@ -51,8 +51,10 @@ def _sum_data(data: bytes):
 
 def build_frame(cmd: int, sid: int, data: bytes = b"") -> bytes:
     sh = _sum_head(cmd, sid, len(data))
-    sd = _sum_data(data)
-    return bytes([0x3E, cmd, sid, len(data), sh]) + data + bytes([sd])
+    head = bytes([0x3E, cmd, sid, len(data), sh])
+    if not data:
+        return head  # DataLen=0 时无数据区、无数据校验字节（协议 V3.0.1 示例帧皆为 5 字节）
+    return head + data + bytes([_sum_data(data)])
 
 
 class MWD3E:
@@ -97,12 +99,17 @@ class MWD3E:
         datalen = head[3]
         if _sum_head(head[1], head[2], datalen) != head[4]:
             raise MWD3EError(f"站{sid} 头校验错")
-        rdata = self._ser.read(datalen + 1) if datalen else self._ser.read(1)
-        if len(rdata) < datalen + 1:
-            raise MWD3EError(f"站{sid} 数据区不完整")
-        payload, sd = rdata[:datalen], rdata[datalen]
-        if _sum_data(payload) != sd:
-            raise MWD3EError(f"站{sid} 数据校验错")
+        if datalen:
+            rdata = self._ser.read(datalen + 1)
+            if len(rdata) < datalen + 1:
+                raise MWD3EError(f"站{sid} 数据区不完整")
+            payload, sd = rdata[:datalen], rdata[datalen]
+            if _sum_data(payload) != sd:
+                raise MWD3EError(f"站{sid} 数据校验错")
+        else:
+            # 0x80/0x81/0x88 这类无数据指令的应答只有 5 字节头，
+            # 无数据区也无数据校验字节（协议 V3.0.1 §5-7），不能再读
+            payload = b""
         return payload
 
     # ---------- 只读 ----------
@@ -127,11 +134,14 @@ class MWD3E:
         return {"temp": temp, "iq": iq, "speed_dps": speed, "enc": enc}
 
     def read_position_deg(self, sid: int) -> float:
-        """0x92：多圈绝对角度，0.01°/LSB。"""
+        """0x92：多圈绝对角度，0.01°/LSB。
+        协议 V3.0.1 §26：应答数据区 7 字节有符号小端数，需符号扩展到 8 字节
+        再按 int64 解析；直接补 0x00 会把负角度解析成巨大正数。"""
         d = self._xfer(CMD_READ_MULTITURN_ANGLE, sid, expect_len=8)
-        # 协议写 7 字节，按 8 字节 int64 解析（多读的补零不影响小角度）
-        raw = d[:8].ljust(8, b"\x00")
-        angle = struct.unpack("<q", raw)[0]
+        if len(d) < 8:
+            pad = b"\xff" if (d[-1] & 0x80) else b"\x00"
+            d = d + pad * (8 - len(d))
+        angle = struct.unpack("<q", d[:8])[0]
         return angle / 100.0
 
     def read_speed_dps(self, sid: int) -> float:
