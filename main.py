@@ -18,7 +18,7 @@ from ibvs import IBVSTracker, IBVSConfig
 from video import source as video_source
 from video import mjpeg_server
 from drivers import rangefinder as rng_mod
-from drivers.ts6004_driver import TS6004, resolve_port
+from drivers.mwd_3e_driver import MWD3E, resolve_port
 from runlog.run_logger import RunLogger
 
 try:
@@ -73,7 +73,7 @@ def main():
     drv_kwargs = {"baud": g["baud"]}
     if port != "auto":
         drv_kwargs["port"] = port
-    drv = TS6004(**drv_kwargs)
+    drv = MWD3E(**drv_kwargs)
     drv.open()                                # 4. 串口检查（含 mock 提示）
     real = drv.real
     mode = "real" if real else "mock"
@@ -82,10 +82,8 @@ def main():
             sys.exit("real 模式软限位为空，拒绝启动")
         lo, hi = g["soft_limit_deg"]
         for sid in (g["roll_id"], g["pitch_id"]):
-            drv.setup_motion(sid, max_speed_dps=g["motion_max_speed_dps"],
-                             accel=g["motion_accel"], decel=g["motion_decel"])
-            drv.set_soft_limits(sid, lo, hi)
-        logger.event(f"云台 real：限位 [{lo}, {hi}]°，运动曲线已下发")
+            drv.enable(sid)
+        logger.event(f"云台 real：限位 [{lo}, {hi}]°（软件钳制），电机已使能")
     else:
         logger.event("云台 mock：指令只记录不发送")
 
@@ -219,8 +217,14 @@ def main():
                     if not (lo <= pos <= hi):
                         fault = f"俯仰 {pos:.1f}° 超限位"
                     else:
-                        drv.command_velocity_dps(g["pitch_id"], pv, dt,
-                                                 soft_limit_deg=(lo, hi))
+                        # 0x3E 增量位置：IBVS 速度转增量，软件钳制到限位内
+                        inc = pv * dt
+                        if pos + inc < lo:
+                            inc = lo - pos
+                        elif pos + inc > hi:
+                            inc = hi - pos
+                        if abs(inc) > 1e-6:
+                            drv.command_increment_deg(g["pitch_id"], inc)
                 if isinstance(det, MockDetector):
                     det.apply_motion(pv, dt)  # mock 闭环：虚拟云台带动虚拟目标
             except Exception as e:
@@ -229,7 +233,7 @@ def main():
                 sm.update(False, 0, fault=fault, fault_reason=fault)
                 logger.event(fault)
                 if real:
-                    drv.emergency_stop(g["pitch_id"])
+                    drv.estop(g["pitch_id"])
 
             r = rng.read()
             # 测距辅助对焦：只跟有效目标的距离；无有效目标/测距无效时保持上次位置

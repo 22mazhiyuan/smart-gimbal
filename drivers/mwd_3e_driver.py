@@ -36,6 +36,37 @@ CMD_POS_INCREMENT_LIM = 0xA8
 
 REAL_MOTION = os.environ.get("GIMBAL_REAL_MOTION", "0") == "1"
 
+def resolve_port(vid_pid="", serial_short=""):
+    """按 VID:PID/序列号找串口，返回 /dev/ttyUSBn。
+    硬保护：serial_short 为空时拒绝按 VID:PID 裸识别——旧云台也是
+    CP2102N（10c4:ea60），裸识别会把命令发到旧云台上。"""
+    if vid_pid and not serial_short:
+        raise ValueError("serial 为空：禁止按 VID:PID 裸识别（旧云台同为 CP2102N，会发错设备）。"
+                         "填新转接器序列号，或把 config 的 port 写死。")
+    import glob
+    import subprocess
+    for dev in sorted(glob.glob("/dev/ttyUSB*")):
+        try:
+            out = subprocess.run(["udevadm", "info", "-n", dev],
+                                 capture_output=True, text=True, timeout=5).stdout
+        except Exception:
+            continue
+        props = {}
+        for line in out.splitlines():
+            line = line.strip()
+            if line.startswith("E: ") and "=" in line:
+                k, v = line[3:].split("=", 1)
+                props[k] = v
+        if vid_pid and f"{props.get('ID_VENDOR_ID','')}:{props.get('ID_MODEL_ID','')}".lower() \
+                != vid_pid.lower():
+            continue
+        if serial_short and props.get("ID_SERIAL_SHORT", "") != serial_short:
+            continue
+        return dev
+    return None
+
+
+
 
 class MWD3EError(Exception):
     pass
@@ -198,3 +229,12 @@ class MWD3E:
     def stop(self, sid: int):
         """停转：速度环发 0。"""
         self.command_speed_dps(sid, 0.0)
+    def stop_all(self):
+        """两轴都停。"""
+        for sid in (ID_ROLL, ID_PITCH):
+            try:
+                self.stop(sid)
+            except Exception as e:
+                print(f"站{sid} 停止失败：{e}")
+
+

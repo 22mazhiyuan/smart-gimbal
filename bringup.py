@@ -81,7 +81,7 @@ def check_serial(cfg):
     print(f"  发现串口：{ports or '无'}")
     print("  边界：ttyUSB0=旧云台，ttyACM0=飞控，勿动")
     g = cfg["gimbal"]
-    from drivers.ts6004_driver import resolve_port
+    from drivers.mwd_3e_driver import resolve_port
     if g.get("serial"):
         found = resolve_port(g.get("vid_pid", ""), g["serial"])
         if found:
@@ -100,15 +100,17 @@ def check_gimbal_readonly(cfg):
     if g["mode"] != "real" or os.environ.get("GIMBAL_REAL_MOTION") != "1":
         print("  mock 模式，跳过硬件只读（real 时自动执行三帧验证）")
         return
-    from drivers.ts6004_driver import TS6004
-    d = TS6004()
+    from drivers.mwd_3e_driver import MWD3E
+    d = MWD3E(port=g.get("port", "/dev/ttyUSB0") if g.get("port") != "auto" else "/dev/ttyUSB0",
+              baud=g.get("baud", 460800))
     d.open()
     try:
         for slave in (g["roll_id"], g["pitch_id"]):
-            st = d.read_status(slave)
+            st = d.read_status1(slave)
             pos = d.read_position_deg(slave)
             spd = d.read_speed_dps(slave)
-            print(f"  站{slave}：状态={st} 位置={pos:.1f}° 速度={spd:.1f}°/s")
+            print(f"  站{slave}：电压={st['vbus']:.1f}V 故障={st['fault']:#x} "
+                  f"位置={pos:.1f}° 速度={spd:.1f}°/s")
         print("  只读三帧 OK，下一步：引导式 2° 空载点动")
     finally:
         d.close()
